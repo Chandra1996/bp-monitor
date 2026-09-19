@@ -1,0 +1,16 @@
+{
+  "name": "bp-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/filesystem": "^6.0.1",
+    "@capacitor/share": "^6.0.2",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "jspdf": "^2.5.1",
+    "tesseract.js": "^5.1.1",
+    "tesseract.js-core": "^5.1.1"
+  }
+}
