@@ -15,6 +15,8 @@ function to12(time) {
   let [h, m] = time.split(':').map(Number); const ap = h >= 12 ? 'PM' : 'AM';
   h = h % 12 || 12; return `${h}:${pad(m)} ${ap}`;
 }
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function fmtDate(s) { const [y, m, d] = s.split('-').map(Number); return `${d} ${MONTHS[m - 1]} ${y}`; }
 function setNow() {
   const d = new Date();
   $('date').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -32,7 +34,7 @@ function render() {
   const all = load().sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
   $('list').innerHTML = all.length ? all.map(r => `
     <div class="item">
-      <div class="when">${r.date}<br>${to12(r.time)} <span class="badge ${r.tod}">${r.tod}</span></div>
+      <div class="when">${fmtDate(r.date)}<br>${to12(r.time)} <span class="badge ${r.tod}">${r.tod}</span></div>
       <div class="vals ${r.sys >= 140 || r.dia >= 90 ? 'hi' : ''}">${r.sys}/${r.dia} <small>mmHg</small><br><small>♥ ${r.pulse} bpm</small></div>
       <button class="del" data-id="${r.id}">🗑</button>
     </div>`).join('') : '<div class="empty">No readings yet</div>';
@@ -129,14 +131,14 @@ $('pdfBtn').onclick = async () => {
   doc.text(`Generated: ${new Date().toLocaleString()}   |   Range: ${r === 'all' ? 'All readings' : 'Last ' + r + ' days'}`, 14, 25);
   const avg = k => Math.round(rows.reduce((s, x) => s + x[k], 0) / rows.length);
   doc.text(`Readings: ${rows.length}   |   Average: ${avg('sys')}/${avg('dia')} mmHg, pulse ${avg('pulse')} bpm`, 14, 31);
-  const cols = [['Date', 14], ['Time', 46], ['Day/Night', 76], ['SYS', 108], ['DIA', 130], ['Pulse', 152]];
+  const cols = [['Date', 14], ['Time', 58], ['Day/Night', 86], ['SYS', 116], ['DIA', 137], ['Pulse', 158]];
   let y = 42;
   const header = () => { doc.setFont(undefined, 'bold'); doc.setFillColor(230, 230, 235); doc.rect(12, y - 6, 186, 8, 'F'); cols.forEach(([t, x]) => doc.text(t, x, y)); doc.setFont(undefined, 'normal'); y += 8; };
   header();
   rows.forEach(x => {
     if (y > 280) { doc.addPage(); y = 20; header(); }
     if (x.sys >= 140 || x.dia >= 90) doc.setTextColor(200, 30, 30);
-    [x.date, to12(x.time), x.tod, String(x.sys), String(x.dia), String(x.pulse)].forEach((t, i) => doc.text(t, cols[i][1], y));
+   [fmtDate(x.date), to12(x.time), x.tod, String(x.sys), String(x.dia), String(x.pulse)].forEach((t, i) => doc.text(t, cols[i][1], y));
     doc.setTextColor(0); y += 7;
   });
   const name = `BP_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
