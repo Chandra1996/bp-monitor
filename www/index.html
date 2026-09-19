@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BP Monitor</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><h1>❤️ BP Monitor</h1></header>
+<main>
+  <section class="card">
+    <h2>New reading</h2>
+    <div class="row">
+      <label>Date<input type="date" id="date"></label>
+      <label>Time<input type="time" id="time"></label>
+    </div>
+    <div class="tod" id="tod"></div>
+
+    <button class="scan" id="scanBtn">📷 Scan from BP monitor</button>
+    <input type="file" id="file" accept="image/*" capture="environment" hidden>
+    <div class="status" id="status"></div>
+
+    <div class="row three">
+      <label>SYS<input type="number" id="sys" inputmode="numeric" placeholder="120"></label>
+      <label>DIA<input type="number" id="dia" inputmode="numeric" placeholder="80"></label>
+      <label>Pulse<input type="number" id="pulse" inputmode="numeric" placeholder="72"></label>
+    </div>
+    <div class="row">
+      <button class="primary" id="saveBtn">Save reading</button>
+      <button class="ghost" id="clearBtn">Clear</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head">
+      <h2>History</h2>
+      <div class="export">
+        <select id="range">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="all">All</option>
+        </select>
+        <button class="primary small" id="pdfBtn">📄 PDF</button>
+      </div>
+    </div>
+    <div id="list"></div>
+  </section>
+</main>
+
+<script src="lib/tesseract.min.js"></script>
+<script src="lib/jspdf.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
