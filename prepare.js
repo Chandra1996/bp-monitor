@@ -12,3 +12,8 @@ const dataDir = path.join(__dirname, 'node_modules/@tesseract.js-data/eng/4.0.0_
 const gz = fs.existsSync(dataDir) ? dataDir : path.join(__dirname, 'node_modules/@tesseract.js-data/eng/4.0.0');
 fs.copyFileSync(path.join(gz, 'eng.traineddata.gz'), path.join(out, 'eng.traineddata.gz'));
 console.log('copied eng.traineddata.gz from', gz);
+
+// Embed the language data inside a .js file (Android's local server refuses to serve .gz files)
+const b64 = fs.readFileSync(path.join(out, 'eng.traineddata.gz')).toString('base64');
+fs.writeFileSync(path.join(out, 'eng-data.js'), 'window.ENG_GZ_B64="' + b64 + '";');
+console.log('wrote eng-data.js');
