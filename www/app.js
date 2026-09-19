@@ -60,24 +60,38 @@ $('clearBtn').onclick = () => { ['sys', 'dia', 'pulse'].forEach(i => $(i).value 
 const say = t => { $('status').textContent = t; };
 const withTimeout = (p, ms, label) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(label + ' timed out')), ms))]);
 let worker;
-async function makeWorker(gzip) {
-  const base = new URL('lib', location.href).href;
-  const w = await Tesseract.createWorker('eng', 1, {
-    workerPath: base + '/worker.min.js', corePath: base, langPath: base,
-    workerBlobURL: false, gzip, cacheMethod: 'none',
-    logger: m => { if (m.status && m.progress != null) say('⏳ ' + m.status + ' ' + Math.round(m.progress * 100) + '%'); },
-    errorHandler: e => say('❌ OCR engine error: ' + (e && e.message || e))
+const loadScript = src => new Promise((res, rej) => { const t = document.createElement('script'); t.src = src; t.onload = res; t.onerror = () => rej(new Error('could not load ' + src)); document.head.appendChild(t); });
+// Put the language data straight into the OCR engine's cache (IndexedDB) so nothing has to be fetched
+function seedCache(bytes) {
+  return new Promise((res, rej) => {
+    const open = indexedDB.open('keyval-store');
+    open.onupgradeneeded = () => open.result.createObjectStore('keyval');
+    open.onerror = () => rej(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      if (!db.objectStoreNames.contains('keyval')) { db.close(); return rej(new Error('cache store missing')); }
+      const tx = db.transaction('keyval', 'readwrite');
+      tx.objectStore('keyval').put(bytes, './eng.traineddata');
+      tx.oncomplete = () => { db.close(); res(); };
+      tx.onerror = () => rej(tx.error);
+    };
   });
-  await w.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: '11' });
-  return w;
 }
 async function getWorker() {
   if (worker) return worker;
-  try { say('⏳ Starting OCR engine…'); worker = await withTimeout(makeWorker(true), 90000, 'OCR engine start (gz)'); }
-  catch (e1) {
-    say('⏳ Retrying engine start… (' + e1.message + ')');
-    worker = await withTimeout(makeWorker(false), 90000, 'OCR engine start (plain)');
-  }
+  say('⏳ Starting OCR engine…');
+  if (!window.ENG_GZ_B64) await loadScript('lib/eng-data.js');
+  const bin = atob(window.ENG_GZ_B64), data = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) data[i] = bin.charCodeAt(i);
+  await seedCache(data);
+  const base = new URL('lib', location.href).href;
+  worker = await withTimeout(Tesseract.createWorker('eng', 1, {
+    workerPath: base + '/worker.min.js', corePath: base, langPath: base,
+    workerBlobURL: false, cacheMethod: 'readOnly',
+    logger: m => { if (m.status && m.progress != null) say('⏳ ' + m.status + ' ' + Math.round(m.progress * 100) + '%'); },
+    errorHandler: e => say('❌ OCR engine error: ' + (e && e.message || e))
+  }), 90000, 'OCR engine start');
+  await worker.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: '11' });
   return worker;
 }
 function prep(img, invert, thresh) {
