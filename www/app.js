@@ -57,15 +57,27 @@ $('saveBtn').onclick = () => {
 $('clearBtn').onclick = () => { ['sys', 'dia', 'pulse'].forEach(i => $(i).value = ''); setNow(); $('status').textContent = ''; };
 
 // ---------- scan (OCR, fully offline) ----------
+const say = t => { $('status').textContent = t; };
+const withTimeout = (p, ms, label) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(label + ' timed out')), ms))]);
 let worker;
+async function makeWorker(gzip) {
+  const base = new URL('lib', location.href).href;
+  const w = await Tesseract.createWorker('eng', 1, {
+    workerPath: base + '/worker.min.js', corePath: base, langPath: base,
+    workerBlobURL: false, gzip, cacheMethod: 'none',
+    logger: m => { if (m.status && m.progress != null) say('⏳ ' + m.status + ' ' + Math.round(m.progress * 100) + '%'); },
+    errorHandler: e => say('❌ OCR engine error: ' + (e && e.message || e))
+  });
+  await w.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: '11' });
+  return w;
+}
 async function getWorker() {
   if (worker) return worker;
-  const base = new URL('lib/', location.href).href;
-  worker = await Tesseract.createWorker('eng', 1, {
-    workerPath: base + 'worker.min.js', corePath: base, langPath: base,
-    workerBlobURL: false, gzip: true, cacheMethod: 'none'
-  });
-  await worker.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: '11' });
+  try { say('⏳ Starting OCR engine…'); worker = await withTimeout(makeWorker(true), 90000, 'OCR engine start (gz)'); }
+  catch (e1) {
+    say('⏳ Retrying engine start… (' + e1.message + ')');
+    worker = await withTimeout(makeWorker(false), 90000, 'OCR engine start (plain)');
+  }
   return worker;
 }
 function prep(img, invert, thresh) {
@@ -99,23 +111,25 @@ function parse(text) {
 $('scanBtn').onclick = () => $('file').click();
 $('file').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
-  $('status').textContent = '⏳ Reading image… (first scan may take a few seconds)';
+  say('⏳ Loading photo…');
   try {
-    const img = new Image(); img.src = URL.createObjectURL(f); await img.decode();
+    const img = new Image(); img.src = URL.createObjectURL(f);
+    await withTimeout(new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error('photo could not be opened')); }), 30000, 'Photo load');
     const w = await getWorker();
-    let best = { score: 0 };
+    let best = { score: 0 }, seen = '';
     for (const [inv, th] of [[false, false], [true, false], [false, true], [true, true]]) {
-      const { data } = await w.recognize(prep(img, inv, th));
+      say('⏳ Reading digits… (try ' + ((inv ? 1 : 0) + (th ? 2 : 0) + 1) + '/4)');
+      const { data } = await withTimeout(w.recognize(prep(img, inv, th)), 60000, 'Reading');
+      seen += ' ' + data.text.replace(/\s+/g, ' ');
       const r = parse(data.text); if (r.score > best.score) { best = r; break; }
     }
     if (best.score) {
       $('sys').value = best.sys; $('dia').value = best.dia; $('pulse').value = best.pulse;
-      setNow();
-      $('status').textContent = '✅ Read SYS/DIA/Pulse — please verify before saving.';
+      setNow(); say('✅ Read SYS/DIA/Pulse — please verify before saving.');
     } else {
-      $('status').textContent = '⚠️ Could not read clearly. Retake with the display filling the frame, no glare — or type values manually.';
+      say('⚠️ Could not find 3 valid numbers. OCR saw: "' + seen.trim().slice(0, 60) + '". Retake closer, no glare — or type values.');
     }
-  } catch (err) { $('status').textContent = '❌ Scan failed: ' + err.message; }
+  } catch (err) { say('❌ Scan failed: ' + err.message); worker = null; }
   e.target.value = '';
 };
 
@@ -131,14 +145,14 @@ $('pdfBtn').onclick = async () => {
   doc.text(`Generated: ${new Date().toLocaleString()}   |   Range: ${r === 'all' ? 'All readings' : 'Last ' + r + ' days'}`, 14, 25);
   const avg = k => Math.round(rows.reduce((s, x) => s + x[k], 0) / rows.length);
   doc.text(`Readings: ${rows.length}   |   Average: ${avg('sys')}/${avg('dia')} mmHg, pulse ${avg('pulse')} bpm`, 14, 31);
-  const cols = [['Date', 14], ['Time', 58], ['Day/Night', 86], ['SYS', 116], ['DIA', 137], ['Pulse', 158]];
+  const cols = [['Date', 14], ['Time', 46], ['Day/Night', 76], ['SYS', 108], ['DIA', 130], ['Pulse', 152]];
   let y = 42;
   const header = () => { doc.setFont(undefined, 'bold'); doc.setFillColor(230, 230, 235); doc.rect(12, y - 6, 186, 8, 'F'); cols.forEach(([t, x]) => doc.text(t, x, y)); doc.setFont(undefined, 'normal'); y += 8; };
   header();
   rows.forEach(x => {
     if (y > 280) { doc.addPage(); y = 20; header(); }
     if (x.sys >= 140 || x.dia >= 90) doc.setTextColor(200, 30, 30);
-   [fmtDate(x.date), to12(x.time), x.tod, String(x.sys), String(x.dia), String(x.pulse)].forEach((t, i) => doc.text(t, cols[i][1], y));
+    [fmtDate(x.date), to12(x.time), x.tod, String(x.sys), String(x.dia), String(x.pulse)].forEach((t, i) => doc.text(t, cols[i][1], y));
     doc.setTextColor(0); y += 7;
   });
   const name = `BP_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
@@ -154,3 +168,5 @@ $('pdfBtn').onclick = async () => {
 };
 
 setNow(); render();
+
+
